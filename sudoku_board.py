@@ -4,7 +4,7 @@ class sudoku_board:
 
     def __init__(self):
         self.board = [] # the board itself
-        self._coordinates = {} # dict to store numbers' coordinates
+        self._coords = {} # dict to store numbers' coordinates
     
     def _initialize_board(self, size):
         for i in range(size):
@@ -40,68 +40,115 @@ class sudoku_board:
         else:
             return column_number
     
-    def get_column_data(self, column):
-        column_data = []
-
-        for number in self._coordinates.keys():
-                for position, element in enumerate(self._coordinates[number]):
-                    if position == column: 
-                        column_data.append(element)
+    def insert_element(self, value, row_number, column_number):
         
-        return column_data
-    
-    def number_fits_next_spot(self, size, value, key, column):
-        elements = []
+        row_to_insert = self._get_row(row_number)
+        col_to_insert = self._get_column(column_number)
 
-        for n in range(key+1, size+1):
+        if(
+            self.board[row_number][column_number] == 0 and
+            value not in row_to_insert and
+            value not in col_to_insert
+        ):
             try:
-                elements.append(self._coordinates[n][column])
+                self.board[row_number][column_number] = value
+                return 1
             except:
-                pass
-        
-        if value in elements:
-            return False
+                print(f"Error inserting {value} in cell: ({row_number},{column_number})!")
+                return -1
         else:
-            return True
-
-    def create_positions(self, size, value):
-        result = {}
-        existing_coordinates = {}
-        used_numbers = []
-
-        for column in range(0, size):
-            existing_coordinates = self.get_column_data(column)
-
-            values_to_fill = list(set(range(1, size + 1)) - set(existing_coordinates) - set(used_numbers)) 
-
-            #shuffle(values_to_fill)
-
-            
-            try:
-                value_to_insert = values_to_fill[0]
-            except:
-                value_to_insert = -1
-            
-            if column == size-1:
-                if not(self.number_fits_next_spot(size, value_to_insert, value, column+1)):
-                    result.setdefault(value,[]).append(value_to_insert)
-            
-            used_numbers.append(value_to_insert)
-
-        return result
-
-                
+            return -1 # we need to know when the insert fails, so we can use if clause with function
     
+
+    def elems_that_fit(self, values, row_number, column_number, row_to_insert, col_to_insert):
+        result = []
+        for value in values:
+            if(
+                self.board[row_number][column_number] == 0 and
+                value not in row_to_insert and
+                value not in col_to_insert
+            ):
+                result.append(value)
+        
+        return result
+                
+    def insert_missing(self):
+        
+        for row_number, row_data in enumerate(self.board):
+            for column_number, column in enumerate(row_data):
+                try:
+                    if self.board[row_number][column_number] == 0:
+
+                        column_data = set(self._get_column(column_number))
+
+                        values = set(range(1, self._get_size() + 1))
+
+                        #print(f"elems in row: {row_data}")
+                        #print(f"elems in col: {column_data}")
+
+                        missing_value = list(values - (set(row_data) | column_data))[0]
+
+                        if missing_value:  # if there is a missing value
+                            self.insert_element(missing_value, row_number, column_number)
+                except Exception as e:
+                    print(f"Error Inserting Missed Values, for value: {self.board[row_number][column_number]} in position: {(row_number, column_number)}")
+                    print(type(e))
+
 
     def fill_in_area(self, size):
         
-        values = range(1,size+1)
+        rows = list(range(size))
+        columns = list(range(size))
+        
+        not_inserted = {}
 
-        for number in values:
-            self._coordinates.update(self.create_positions(size, number))
+        for row in rows:
+            for column_number in columns:
+                if self.board[row][column_number-1] == 0:
+                    pass
+                values = list(range(1, size + 1)) # a list to shuffle and pop each unique numbers to fill in
+                shuffle(values)
+                while values:
+                    value = values.pop()
+                    row_to_insert = self._get_row(row)
+                    col_to_insert = self._get_column(column_number)
 
-        print(self._coordinates)
+                    next_column_number = self._get_next_column(len(self.board[0]), column_number) # return next column's data
+                    next_column_data = self._get_column(next_column_number)
+                    
+                    # we can only insert a value in present location if we know there's a number that fits next position
+                    # this next functions tells us if there's any value of the remaining values that fit next position.
+                    next_elems_that_fit = self.elems_that_fit(values,row, next_column_number, row_to_insert, next_column_data)
+                    
+                    #now, until it's not the last column, we check if there's an elem left that can be inserted in next position
+                    # if so, then we can run our tests to see if the present element can be inserted in present location
+                    # if not, that means we need to swap elements: this present element needs to be insert in last position
+                    # and next value in queue needs to be inserted in before-last position.
+                    # so we avoid dead-ends, so tipycal in sudoku boards creations.
+                    if column_number < size - 1: # while we're not looking at the last column...
 
+                        if not(next_elems_that_fit): # if there's no next elem that fits last position
+                            try:
+                                self.insert_element(values[0], row, column_number) # we call insert function to try to insert next elem in before-last position
+                                self.insert_element(value, row, next_column_number) # and we try as well to insert present elem in last position
+                            except:
+                                pass
+
+                        else:
+                            self.insert_element(value, row, column_number) # if there's elems that fit, we can insert present elem in present position, we know next elem will be inserted OK when his time comes.
+                    else:
+                        #if it's last elem/position to insert, try inserting last value
+                        self.insert_element(value, row, column_number)
+
+                    #if we missed to insert a value, we'll collect them now
+                    #if column_number == size - 1 and value not in self.board[row]:
+                    #    not_inserted[(row, column_number)] = value # this means we reached the end of the line and didn't insert the value. But value needs to be inserted in the row so we append it back to rey again later
+        
+        #print(f"Didnt' insert: {not_inserted.items()}.")
+
+        # we go through the missed values and try to find the missing values to complete the board.
+        for elem in self.board: 
+            self.insert_missing()
              
              
                
